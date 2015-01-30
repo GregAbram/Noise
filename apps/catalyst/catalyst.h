@@ -1,4 +1,3 @@
-#include <catalyst.h>
 
 void InitializeCatalyst(int numscripts, char *scripts);
 void FinalizeCatalyst();
