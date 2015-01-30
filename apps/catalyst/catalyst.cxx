@@ -1,11 +1,15 @@
-#include <catalyst.h>
+#include "catalyst.h"
+
+#include "paraview-4.3/vtkCPProcessor.h"
+#include "paraview-4.3/vtkCPDataDescription.h"
+#include "paraview-4.3/vtkCPPythonScriptPython.h"
 
 #include "vtkImageData.h"
 #include "vtkPointData.h"
 #include "vtkFloatArray.h"
 
 vtkCPProcessor *Processor = NULL;
-vtImageData *VTKGrid = NULL;
+vtkImageData *VTKGrid = NULL;
 
 void InitializeCatalyst(int numscripts, char *scripts)
 {
@@ -73,13 +77,13 @@ void CoProcessCatalyst(int extent[6], float spacing[3],
 		vectors->Delete();
 	}
 
-	vtkCPDataDescriptor *dataDesc = vtkCPDataDescriptor::New();
+	vtkCPDataInputDescription *dataDesc = vtkCPDataInputDescription::New();
 	dataDesc->AddInput("input");
 	dataDesc->SetTimeData(time, timestep);
 	if (lastTimeStep)
 		dataDesc->ForceOutputOn();
 
-  if (Processor->RequestDataDescription(dataDesc) != 0)
+  if (Processor->RequestDataInputDescription(dataDesc) != 0)
 	{
 		dataDesc->GetInputDescriptionByName("input")->SetGrid(VTKGrid);
 		Processor->CoProcess(dataDesc);

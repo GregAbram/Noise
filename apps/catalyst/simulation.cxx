@@ -10,41 +10,10 @@
 #include <math.h>
 #include <noise/noise.h>
 
-#include "vtkImageData.h"
-#include "vtkPointData.h"
-#include "vtkFloatArray.h"
-
 using namespace noise;
 using namespace std;
 
-
-
-
-
-
-
-
-				vtkImageData *id = vtkImageData::New();
-				id->Initialize();
-				id->SetExtent(sz, ez, sy, ey, sx, ex);
-				id->SetSpacing(d, d, d);
-				id->SetOrigin(0, 0, 0);
-
-				vtkFloatArray *scalars = vtkFloatArray::New();
-				scalars->SetNumberOfComponents(1);
-				scalars->SetArray(noise, np, 1);
-				scalars->SetName("noise");
-				id->GetPointData()->SetScalars(scalars);
-				scalars->Delete();
-
-				vtkFloatArray *vectors = vtkFloatArray::New();
-				vectors->SetNumberOfComponents(3);
-				vectors->SetArray(gradient, 3*np, 1);
-				vectors->SetName("gradient");
-				id->GetPointData()->SetVectors(vectors);
-				vectors->Delete();
-
-				id->Delete();
+#include "catalyst.h"
 
 void
 factor(int n, int *factors)
