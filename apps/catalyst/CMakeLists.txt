@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 2.8.7)
+project(Test)
+find_package(VTK REQUIRED)
+include(${VTK_USE_FILE})
+add_executable(catalyst catalyst.cxx)
+include_directories(/usr/local/include)
+link_directories(/usr/local/lib)
+target_link_libraries(catalyst ${VTK_LIBRARIES} noise)
+install(TARGETS catalyst DESTINATION bin)
+
