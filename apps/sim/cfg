@@ -1,0 +1,6 @@
+CC=mpicc CXX=mpicxx cmake .. \
+	-DCMAKE_INSTALL_PREFIX=/Users/gda/noise \
+	-DCMAKE_CXX_FLAGS="-I/Users/gda/noise/include" \
+	-DCMAKE_EXE_LINKER_FLAGS="-L/Users/gda/noise/lib -lnoise" \
+	-DVTK_DIR=/Users/gda/vtk-7.0/lib/cmake/vtk-7.0
+
