@@ -18,6 +18,7 @@
 #include <vtkActor.h>
 #include <vtkCamera.h>
 #include <vtkPNGWriter.h>
+#include <vtkProperty.h>
 
 using namespace vtk;
 using namespace std;
@@ -183,10 +184,12 @@ main(int argc, char *argv[])
 
 		vtkPolyDataMapper *mapper = vtkPolyDataMapper::New();
 		mapper->SetInputConnection(contourFilter->GetOutputPort());
+		mapper->ScalarVisibilityOff();
 		contourFilter->Delete();
  
 		vtkActor *actor = vtkActor::New();
 		actor->SetMapper(mapper);
+		actor->GetProperty()->SetColor((mpir & 0x1) ? 1.0 : 0.0, (mpir & 0x2) ? 1.0 : 0.5, (mpir & 0x4) ? 1.0 : 0.5);
 		renderer->AddActor(actor);
 		actor->Delete();
 
