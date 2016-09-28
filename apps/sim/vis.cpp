@@ -19,61 +19,97 @@
 #include <vtkCamera.h>
 #include <vtkPNGWriter.h>
 #include <vtkProperty.h>
+#include <vtkPointData.h>
+#include <vtkFloatArray.h>
 
 using namespace vtk;
 using namespace std;
 
+int frame = 0;
+
 vtkMPIController *controller = NULL;
 vtkRenderer* renderer = NULL;
 vtkRenderWindow *renderWindow = NULL;
-vtkPNGWriter *writer = NULL;
 
 int mpir, mpis;
-int tstep = 0;
 
 void
 process(vtkMultiProcessController *controller, void* arg)
 {
-	vtkCompositeRenderManager *renderManager = vtkCompositeRenderManager::New();
+  vtkCompositeRenderManager *renderManager = vtkCompositeRenderManager::New();
   renderManager->SetRenderWindow(renderWindow);
 
-	if (controller->GetLocalProcessId() == 0)
-    writer->Write();
-  else
-    renderWindow->Render();
+  renderWindow->Render();
 
-	renderManager->Delete();
+  if (controller->GetLocalProcessId() == 0)
+  {
+    vtkWindowToImageFilter *window2image = vtkWindowToImageFilter::New();
+    window2image->SetInput(renderWindow);
+
+    vtkPNGWriter *writer = vtkPNGWriter::New();
+    writer->SetInputConnection(window2image->GetOutputPort());
+    window2image->Delete();
+
+    char frameName[256];
+    sprintf(frameName, "frame-%04d.png", frame);
+    writer->SetFileName(frameName);
+
+    writer->Write();
+    writer->Delete();
+  }
+
+  renderManager->Delete();
 }
 
 void
 syntax(char *a)
 {
-	if (mpir == 0)
-		cerr << "syntax: " << a << " -l layoutfile\n";
-	controller->Finalize();
-	exit(1);
+  if (mpir == 0)
+  {
+    cerr << "syntax: " << a << " -l layoutfile [options]\n";
+    cerr << "options:\n";
+    cerr << "  -l layoutfile      list of IPs or hostnames and ports of vis servers\n";
+    cerr << "  -S                 open server socket and check for connection\n";
+    cerr << "  -C                 check to see if a vis server is waiting (default)\n";
+  }
+
+  controller->Finalize();
+  exit(1);
 }
 
 int
 main(int argc, char *argv[])
 {
-	char *layoutfile = NULL;
+  char *layoutfile = NULL;
+  bool  server_socket = false;
 
-	controller = vtkMPIController::New();
+  controller = vtkMPIController::New();
   controller->Initialize(&argc, &argv);
 
-	mpis = controller->GetNumberOfProcesses();
-	mpir = controller->GetLocalProcessId();
+  mpis = controller->GetNumberOfProcesses();
+  mpir = controller->GetLocalProcessId();
 
-	for (int i = 1; i < argc; i++)
-		if (! strcmp(argv[i], "-l")) { layoutfile = argv[++i]; break; }
-		else syntax(argv[0]);
+  for (int i = 1; i < argc; i++)
+    if (argv[i][0] == '-')
+      switch(argv[i][1])
+      {
+        case 'S': server_socket = true; break;
+        case 'C': server_socket = false; break;
+        case 'l': layoutfile = argv[++i]; break;
+        default:
+          syntax(argv[0]);
+      }
+    else
+      syntax(argv[0]);
 
-	// Select the mpir'th line of the layout file.  That'll contain the 
-	// IP address or hostname of the node this process is running on and 
-	// the port it should listen on.
+  if (! layoutfile)
+    syntax(argv[0]);
 
-	int gerr, lerr = 0;
+  // Select the mpir'th line of the layout file.  That'll contain the 
+  // IP address or hostname of the node this process is running on and 
+  // the port it should listen on.
+
+  int gerr, lerr = 0;
   string server;
   int port;
   ifstream ifs(layoutfile);
@@ -95,9 +131,9 @@ main(int argc, char *argv[])
 
   // Set up the parallel rendering pipeline
 
-	controller->SetSingleMethod(process, (void *)NULL);
+  controller->SetSingleMethod(process, (void *)NULL);
  
-	renderer = vtkRenderer::New();
+  renderer = vtkRenderer::New();
 
   vtkCamera *c = vtkCamera::New();
   c->SetPosition(3.0, 4.0, -5.0);
@@ -107,113 +143,106 @@ main(int argc, char *argv[])
   renderer->SetActiveCamera(c);
   c->Delete();
 
-	renderWindow = vtkRenderWindow::New();
+  renderWindow = vtkRenderWindow::New();
   renderWindow->SetSize(512, 512);
   renderWindow->SetOffScreenRendering(1);
   renderWindow->AddRenderer(renderer);
 
-	// Only the root node writes
+  // Only the root node writes
 
-	if (mpir == 0)
-	{
-		vtkWindowToImageFilter *window2image = vtkWindowToImageFilter::New();
-    window2image->SetInput(renderWindow);
+  // In this simple example, we expect there to be a 1-1 relationship between 
+  // sim processes and vis processes. If told to, we create a single server socket and 
+  // expect the sim to connect to it. Otherwise we connect to server on sim process
 
-		writer = vtkPNGWriter::New();
-    writer->SetInputConnection(window2image->GetOutputPort());
-		window2image->Delete();
-	}
+  vtkServerSocket *serverSocket = NULL;
+  if (server_socket)
+  {
+    serverSocket = vtkServerSocket::New();
+    serverSocket->CreateServer(port);
+  }
 
-	// In this simple example, we expect there to be a 1-1 relationship between 
-	// sim processes and vis processes.   We create a single server socket and 
-	// expect the sim to connect to it.
+  for (frame = 0; 1 == 1; frame++)
+  {
+    renderer->RemoveAllViewProps();
 
-	vtkSmartPointer<vtkSocket> vtkSkt;
-	vtkSmartPointer<vtkServerSocket> srvr = vtkSmartPointer<vtkServerSocket>::New();
-	srvr->CreateServer(port);
+    // Start with nothing to render.    Each input object will be "visualized" and one
+    // or more actors will be added to the renderer for each.  In this example, a single
+    // object is expected per time step
 
-	while (1 == 1)
-	{
-		// Start with nothing to render.    Each input object will be "visualized" and one
-		// or more actors will be added to the renderer for each.  In this example, a single
-		// object is expected per time step
+    vtkSocket *skt = NULL;
+    if (serverSocket)
+    {
+      skt = (vtkSocket *)serverSocket->WaitForConnection(4000000);
+    }
+    else
+    {
+      vtkClientSocket *clientSocket = vtkClientSocket::New();
+      if (clientSocket->ConnectToServer(server.c_str(), port))
+        clientSocket->Delete();
+      else
+        skt = (vtkSocket *)clientSocket;
+    }
 
-		renderer->RemoveAllViewProps(); 
+    if (! skt)
+    {
+      std::cerr << "socket error\n";
+      break;
+    }
 
-		vtkSmartPointer<vtkClientSocket> client = srvr->WaitForConnection(4000000);
-		if (! client)
-		{
-			cerr << "timeout\n";
-			exit(1);
-		}
+    // Got a connection.   Set up the reader
 
-		vtkSkt = vtkSocket::SafeDownCast(client);
+    int sz;
+    char *str;
+    skt->Receive((void *)&sz, sizeof(sz));
+    if (sz < 0) break;
 
-		// Got a connection.   Set up the reader
+    std::cerr << mpir << " " << sz << " bytes\n";
+  
+    vtkCharArray *array = vtkCharArray::New();
+    array->Allocate(sz);
+    array->SetNumberOfTuples(sz);
+    void *ptr = array->GetVoidPointer(0);
 
-		int sz;
-		char *str;
-		vtkSkt->Receive((void *)&sz, sizeof(sz));
-		if (sz < 0) break;
+    skt->Receive(ptr, sz);
+    skt->CloseSocket();
+    skt->Delete();
+  
+    vtkDataSetReader *reader = vtkDataSetReader::New();
+    reader->ReadFromInputStringOn();
+    reader->SetInputArray(array);
+    array->Delete();
 
-		std::cerr << mpir << " " << sz << " bytes\n";
-	
-		vtkCharArray *array = vtkCharArray::New();
-		array->Allocate(sz);
-		array->SetNumberOfTuples(sz);
-		void *ptr = array->GetVoidPointer(0);
+    // Here is where we set up the "visualization pipeline" - in this test,
+    // we create a single (reader)->contour->mapper->actor and add it to
+    // the renderer.  We could also create multiple pipelines starting 
+    // with the same reader and resulting in more than one actor being     
+    // added to the renderer
 
-		vtkSkt->Receive(ptr, sz);
-		vtkSkt->CloseSocket();
-	
-		vtkDataSetReader *reader = vtkDataSetReader::New();
-		reader->ReadFromInputStringOn();
-		reader->SetInputArray(array);
-		array->Delete();
+    vtkContourFilter *contourFilter = vtkContourFilter::New();
+    contourFilter->SetValue(0, 0.00);
+    contourFilter->SetInputConnection(reader->GetOutputPort());
+    reader->Delete();
 
-		// Here is where we set up the "visualization pipeline" - in this test,
-		// we create a single (reader)->contour->mapper->actor and add it to
-		// the renderer.  We could also create multiple pipelines starting 
-		// with the same reader and resulting in more than one actor being 		
-		// added to the renderer
-
-		vtkContourFilter *contourFilter = vtkContourFilter::New();
-		contourFilter->SetValue(0, 0.00);
-		contourFilter->SetInputConnection(reader->GetOutputPort());
-		reader->Delete();
-
-		vtkPolyDataMapper *mapper = vtkPolyDataMapper::New();
-		mapper->SetInputConnection(contourFilter->GetOutputPort());
-		mapper->ScalarVisibilityOff();
-		contourFilter->Delete();
+    vtkPolyDataMapper *mapper = vtkPolyDataMapper::New();
+    mapper->SetInputConnection(contourFilter->GetOutputPort());
+    mapper->ScalarVisibilityOff();
+    contourFilter->Delete();
  
-		vtkActor *actor = vtkActor::New();
-		actor->SetMapper(mapper);
-		actor->GetProperty()->SetColor((mpir & 0x1) ? 1.0 : 0.0, (mpir & 0x2) ? 1.0 : 0.5, (mpir & 0x4) ? 1.0 : 0.5);
-		renderer->AddActor(actor);
-		actor->Delete();
+    vtkActor *actor = vtkActor::New();
+    actor->SetMapper(mapper);
+    actor->GetProperty()->SetColor((mpir & 0x1) ? 1.0 : 0.0, (mpir & 0x2) ? 1.0 : 0.5, (mpir & 0x4) ? 1.0 : 0.5);
+    renderer->AddActor(actor);
+    actor->Delete();
 
-		// This is the end of the setup of the pipeline.  Now we set up the 
-		// writer with a filename and do the parallel rendering (which will 
-		// execute the visualization pipeline(s)
+    // Render and write the result (in the process routine)
 
-		if (mpir == 0)
-		{
-			char frameName[256];
-			sprintf(frameName, "frame-%04d.png", tstep);
-			writer->SetFileName(frameName);
-		}
+    controller->SingleMethodExecute();
+  }
 
-		// Render and write the result (in the process routine)
+  if (serverSocket) serverSocket->Delete();
+  renderer->Delete();
+  renderWindow->Delete();
 
-		controller->SingleMethodExecute();
-	}
-
-	if (writer) writer->Delete();
-	srvr->Delete();
-	renderer->Delete();
-	renderWindow->Delete();
-
-	controller->Finalize();
-	exit(0);
+  controller->Finalize();
+  exit(0);
 }

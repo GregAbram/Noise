@@ -25,7 +25,13 @@ void
 syntax(char *a)
 {
 	if (mpir == 0)
-		cerr << "syntax: " << a << " -l layoutfile\n";
+	{
+    cerr << "syntax: " << a << " -l layoutfile [options]\n";
+    cerr << "options:\n";
+    cerr << "  -l layoutfile      list of IPs or hostnames and ports of vis servers\n";
+    cerr << "  -S                 open server socket and check for connection\n";
+    cerr << "  -C                 check to see if a vis server is waiting (default)\n";
+	}
 	MPI_Finalize();
 	exit(1);
 }
@@ -34,14 +40,27 @@ int
 main(int argc, char *argv[])
 {
 	char *layoutfile = NULL;
+	bool server_socket = false;
 
 	MPI_Init(&argc, &argv);
   MPI_Comm_size(MPI_COMM_WORLD, &mpis);
   MPI_Comm_rank(MPI_COMM_WORLD, &mpir);
 
 	for (int i = 1; i < argc; i++)
-		if (! strcmp(argv[i], "-l")) { layoutfile = argv[++i]; break; }
-		else syntax(argv[0]);
+    if (argv[i][0] == '-')
+      switch(argv[i][1])
+      {
+        case 'S': server_socket = true; break;
+        case 'C': server_socket = false; break;
+        case 'l': layoutfile = argv[++i]; break;
+        default:
+          syntax(argv[0]);
+      }
+    else
+      syntax(argv[0]);
+
+  if (! layoutfile)
+    syntax(argv[0]);
 
 	int gerr, lerr = 0;
   string server;
@@ -63,27 +82,40 @@ main(int argc, char *argv[])
     exit(1);
   }
 
-	vtkSmartPointer<vtkSocket> vtkSkt;
-
-	vtkSmartPointer<vtkServerSocket> srvr = vtkSmartPointer<vtkServerSocket>::New();
-	srvr->CreateServer(port);
+  vtkServerSocket *serverSocket = NULL;
+  if (server_socket)
+  {
+    serverSocket = vtkServerSocket::New();
+    serverSocket->CreateServer(port);
+  }
 
 	int tstep = 0;
 	while (1 == 1)
 	{
-		vtkSmartPointer<vtkClientSocket> client = srvr->WaitForConnection(4000000);
-		if (! client)
-		{
-			cerr << "timeout\n";
-			exit(1);
-		}
+    vtkSocket *skt = NULL;
+    if (serverSocket)
+    {
+      skt = (vtkSocket *)serverSocket->WaitForConnection(4000000);
+    }
+    else
+    {
+      vtkClientSocket *clientSocket = vtkClientSocket::New();
+      if (clientSocket->ConnectToServer(server.c_str(), port))
+        clientSocket->Delete();
+      else
+        skt = (vtkSocket *)clientSocket;
+    }
 
-		vtkSkt = vtkSocket::SafeDownCast(client);
+		if (! skt)
+    {
+      std::cerr << "socket error\n";
+      break;
+    }
 
 		int sz;
 		char *str;
 
-		vtkSkt->Receive((void *)&sz, sizeof(sz));
+		skt->Receive((void *)&sz, sizeof(sz));
 		if (sz < 0) break;
 	
 		vtkSmartPointer<vtkCharArray> array = vtkSmartPointer<vtkCharArray>::New();
@@ -91,8 +123,9 @@ main(int argc, char *argv[])
 		array->SetNumberOfTuples(sz);
 		void *ptr = array->GetVoidPointer(0);
 
-		vtkSkt->Receive(ptr, sz);
-		vtkSkt->CloseSocket();
+		skt->Receive(ptr, sz);
+		skt->CloseSocket();
+		skt->Delete();
 	
 		vtkSmartPointer<vtkDataSetReader> reader = vtkSmartPointer<vtkDataSetReader>::New();
 		reader->ReadFromInputStringOn();
@@ -109,7 +142,7 @@ main(int argc, char *argv[])
 		tstep = tstep + 1;
 	}
 
-	srvr->Delete();
+	serverSocket->Delete();
 
 	MPI_Finalize();
 	exit(0);
