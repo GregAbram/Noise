@@ -12,6 +12,7 @@
 #include <noise/noise.h>
 
 #include <vtkImageData.h>
+#include <vtkXMLImageDataWriter.h>
 #include <vtkPointData.h>
 #include <vtkFloatArray.h>
 #include <vtkDataSetWriter.h>
@@ -252,7 +253,7 @@ int main(int argc, char *argv[])
     {
       vtkImageData *id = vtkImageData::New();
       id->Initialize();
-      id->SetExtent(sx, ex, sy, ey, sz, ez);
+      id->SetExtent(sz, ez, sy, ey, sx, ex);
       id->SetSpacing(d, d, d);
       id->SetOrigin(-1, -1, -1);
       
@@ -269,6 +270,18 @@ int main(int argc, char *argv[])
       vectors->SetName("gradient");
       id->GetPointData()->SetVectors(vectors);
       vectors->Delete();
+
+#if 0
+{
+vtkXMLImageDataWriter *w = vtkXMLImageDataWriter::New();;
+char buf[246];
+sprintf(buf, "sim-%d.vti", mpir);
+w->SetInputData(id);
+w->SetFileName(buf);
+w->Write();
+w->Delete();
+}
+#endif
 
       vtkDataSetWriter *wr = vtkDataSetWriter::New();
       wr->WriteToOutputStringOn();
