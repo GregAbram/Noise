@@ -13,6 +13,8 @@
 
 #include <vtkImageData.h>
 #include <vtkXMLImageDataWriter.h>
+#include <vtkIntArray.h>
+#include <vtkFieldData.h>
 #include <vtkPointData.h>
 #include <vtkFloatArray.h>
 #include <vtkDataSetWriter.h>
@@ -253,7 +255,7 @@ int main(int argc, char *argv[])
     {
       vtkImageData *id = vtkImageData::New();
       id->Initialize();
-      id->SetExtent(sz, ez, sy, ey, sx, ex);
+      id->SetDimensions(lzsz, lysz, lxsz);
       id->SetSpacing(d, d, d);
       id->SetOrigin(-1, -1, -1);
       
@@ -271,7 +273,23 @@ int main(int argc, char *argv[])
       id->GetPointData()->SetVectors(vectors);
       vectors->Delete();
 
-#if 0
+			vtkIntArray *offset = vtkIntArray::New();
+			offset->SetNumberOfComponents(3);
+			offset->SetNumberOfTuples(1);
+			offset->SetName("offset");
+			int *o = (int *)offset->GetVoidPointer(0);
+			o[0] = sx;
+			o[1] = sy;
+			o[2] = sz;
+
+			vtkFieldData *fd = vtkFieldData::New();
+			fd->AddArray(offset);
+			offset->Delete();
+			
+			id->SetFieldData(fd);
+			fd->Delete();
+
+#if 1
 {
 vtkXMLImageDataWriter *w = vtkXMLImageDataWriter::New();;
 char buf[246];

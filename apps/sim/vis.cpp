@@ -21,6 +21,9 @@
 #include <vtkProperty.h>
 #include <vtkPointData.h>
 #include <vtkFloatArray.h>
+#include <vtkIntArray.h>
+#include <vtkFieldData.h>
+
 
 using namespace vtk;
 using namespace std;
@@ -211,6 +214,36 @@ main(int argc, char *argv[])
     reader->ReadFromInputStringOn();
     reader->SetInputArray(array);
     array->Delete();
+
+		reader->Update();
+
+		vtkImageData *id = vtkImageData::SafeDownCast(reader->GetOutput());
+		if (! id)
+		{
+			std::cerr << "error -- received something other than an vtkImageData object\n";
+			break;
+		}
+
+		vtkFieldData *fd = id->GetFieldData();
+		if (fd)
+		{
+			int indx;
+			vtkIntArray *oarray = vtkIntArray::SafeDownCast(fd->GetArray("offset", indx));
+			if (oarray)
+			{
+				int *offsets = (int *)oarray->GetVoidPointer(0);
+				double *spacing = id->GetSpacing();
+
+				double origin[3];
+				id->GetOrigin(origin);
+
+				origin[0] += offsets[0] * spacing[0];
+				origin[1] += offsets[1] * spacing[1];
+				origin[2] += offsets[2] * spacing[2];
+
+				id->SetOrigin(origin);
+			}
+		}
 
     // Here is where we set up the "visualization pipeline" - in this test,
     // we create a single (reader)->contour->mapper->actor and add it to
