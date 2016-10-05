@@ -1,3 +1,5 @@
+#include <sys/types.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <mpi.h>
 #include <iostream>
@@ -40,27 +42,28 @@ void
 process(vtkMultiProcessController *controller, void* arg)
 {
   vtkCompositeRenderManager *renderManager = vtkCompositeRenderManager::New();
-  renderManager->SetRenderWindow(renderWindow);
 
+  renderManager->SetRenderWindow(renderWindow);
   renderWindow->Render();
 
-  if (controller->GetLocalProcessId() == 0)
-  {
-    vtkWindowToImageFilter *window2image = vtkWindowToImageFilter::New();
-    window2image->SetInput(renderWindow);
+	vtkWindowToImageFilter *window2image = vtkWindowToImageFilter::New();
+	window2image->SetInput(renderWindow);
+	window2image->Update();
 
-    vtkPNGWriter *writer = vtkPNGWriter::New();
-    writer->SetInputConnection(window2image->GetOutputPort());
-    window2image->Delete();
+	if (mpir == 0)
+	{
+		vtkPNGWriter *writer = vtkPNGWriter::New();
+		writer->SetInputConnection(window2image->GetOutputPort());
 
-    char frameName[256];
-    sprintf(frameName, "frame-%04d.png", frame);
-    writer->SetFileName(frameName);
+		char frameName[256];
+		sprintf(frameName, "frame-%04d.png", frame);
+		writer->SetFileName(frameName);
 
-    writer->Write();
-    writer->Delete();
-  }
+		writer->Write();
+		writer->Delete();
+	}
 
+	window2image->Delete();
   renderManager->Delete();
 }
 
@@ -93,6 +96,21 @@ main(int argc, char *argv[])
 
   mpis = controller->GetNumberOfProcesses();
   mpir = controller->GetLocalProcessId();
+
+#if 0
+	if (mpir == 0)
+	{
+		std::stringstream cmd;
+		pid_t pid = getpid();
+		cmd << "~/dbg_script " << argv[0] << " " << pid << " " << mpir << " &";
+		std::cerr << "running command: " << cmd.str() << "\n";
+		system(cmd.str().c_str());
+
+		int dbg = 1;
+		while (dbg)
+			sleep(1);
+	}
+#endif
 
   for (int i = 1; i < argc; i++)
     if (argv[i][0] == '-')
