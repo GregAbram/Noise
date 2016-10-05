@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 #include <mpi.h>
 #include <iostream>
 #include <string>
@@ -29,6 +30,7 @@ syntax(char *a)
     cerr << "syntax: " << a << " -l layoutfile [options]\n";
     cerr << "options:\n";
     cerr << "  -l layoutfile      list of IPs or hostnames and ports of vis servers\n";
+    cerr << "  -n knt             number of frames (1)\n";
     cerr << "  -S                 open server socket and check for connection\n";
     cerr << "  -C                 check to see if a vis server is waiting (default)\n";
 	}
@@ -41,6 +43,7 @@ main(int argc, char *argv[])
 {
 	char *layoutfile = NULL;
 	bool server_socket = false;
+	int knt = 1;
 
 	MPI_Init(&argc, &argv);
   MPI_Comm_size(MPI_COMM_WORLD, &mpis);
@@ -52,6 +55,7 @@ main(int argc, char *argv[])
       {
         case 'S': server_socket = true; break;
         case 'C': server_socket = false; break;
+        case 'n': knt = atoi(argv[++i]); break;
         case 'l': layoutfile = argv[++i]; break;
         default:
           syntax(argv[0]);
@@ -90,7 +94,7 @@ main(int argc, char *argv[])
   }
 
 	int tstep = 0;
-	while (1 == 1)
+	for (int i = 0; i < knt; i++)
 	{
     vtkSocket *skt = NULL;
     if (serverSocket)
@@ -140,6 +144,7 @@ main(int argc, char *argv[])
 		writer->Update();
 
 		tstep = tstep + 1;
+		sleep(1);
 	}
 
 	serverSocket->Delete();

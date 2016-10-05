@@ -71,6 +71,7 @@ syntax(char *a)
   {
     cerr << "syntax: " << a << " -l layoutfile [options]\n";
     cerr << "options:\n";
+		cerr << "  -n knt             number of frames to save (1)\n";
     cerr << "  -l layoutfile      list of IPs or hostnames and ports of vis servers\n";
     cerr << "  -S                 open server socket and check for connection\n";
     cerr << "  -C                 check to see if a vis server is waiting (default)\n";
@@ -85,6 +86,7 @@ main(int argc, char *argv[])
 {
   char *layoutfile = NULL;
   bool  server_socket = false;
+	int knt = 1;
 
   controller = vtkMPIController::New();
   controller->Initialize(&argc, &argv);
@@ -96,6 +98,7 @@ main(int argc, char *argv[])
     if (argv[i][0] == '-')
       switch(argv[i][1])
       {
+        case 'n': knt = atoi(argv[++i]); break;
         case 'S': server_socket = true; break;
         case 'C': server_socket = false; break;
         case 'l': layoutfile = argv[++i]; break;
@@ -164,7 +167,7 @@ main(int argc, char *argv[])
     serverSocket->CreateServer(port);
   }
 
-  for (frame = 0; 1 == 1; frame++)
+  for (frame = 0; frame < knt; frame++)
   {
     renderer->RemoveAllViewProps();
 

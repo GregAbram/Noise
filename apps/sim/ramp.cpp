@@ -1,7 +1,7 @@
 #include <mpi.h>
-#include <unistd.h>
 
 #include <stdlib.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -10,7 +10,6 @@
 #include <sstream>
 #include <string>
 #include <math.h>
-#include <noise/noise.h>
 
 #include <vtkImageData.h>
 #include <vtkXMLImageDataWriter.h>
@@ -23,7 +22,6 @@
 
 #include "MyServerSocket.h"
 
-using namespace noise;
 using namespace std;
 
 int  mpir, mpis;
@@ -56,12 +54,9 @@ syntax(char *a)
     {
       cerr << "syntax: " << a << " -l layoutfile [options]\n";
       cerr << "options:\n";
-      cerr << "  -l layoutfile      list of IPs or hostnames and ports of vis servers\n";
+      cerr << "  -l layoutfile      list of IPs or hostnames and ports of vis servers (layout)\n";
       cerr << "  -r xres yres zres  overall grid resolution (256x256x256)\n";
-      cerr << "  -O octave          noise octave (4)\n";
-      cerr << "  -F frequency       noise frequency (8)\n";
-      cerr << "  -P persistence     noise persistence (0.5)\n";
-      cerr << "  -t dt nt           time series delta, number of timesteps (0, 1)\n";
+      cerr << "  -a axis            axis to ramp (0)\n";
       cerr << "  -m r s             set rank, size (for testing)\n";
       cerr << "  -S                 open server socket and check for connection (default)\n";
       cerr << "  -C                 check to see if a vis server is waiting\n";
@@ -70,21 +65,16 @@ syntax(char *a)
     exit(1);
 }
 
-static module::Perlin myModule;
-
 int main(int argc, char *argv[])
 {
   int xsz = 256, ysz = 256, zsz = 256;
   float t = 3.1415926;
-  int octave = 4;
-  float freq = 8.0;
-  float pers = 0.5;
   float delta_t = 0;
-  int   nt = 1;
-  int   psize = 100000000;
-  char  *layoutfile = NULL;
+  int   nt = 10000000;
+  char  *layoutfile = "layout";
   int   lerr, gerr;
   bool  server_socket = true;
+	int    axis = 0;
 
   MPI_Init(&argc, &argv);
   MPI_Comm_size(MPI_COMM_WORLD, &mpis);
@@ -97,16 +87,12 @@ int main(int argc, char *argv[])
         case 'S': server_socket = true; break;
         case 'C': server_socket = false; break;
         case 'l': layoutfile = argv[++i]; break;
-        case 'p': psize = atoi(argv[++i]); break;
         case 'm': mpir = atoi(argv[++i]);
                   mpis = atoi(argv[++i]); break;
         case 'r': xsz = atoi(argv[++i]);
                   ysz = atoi(argv[++i]);
                   zsz = atoi(argv[++i]); break;
-        case 'P': pers = atof(argv[++i]); break;
-        case 'F': freq = atof(argv[++i]); break;
-        case 'O': octave = atoi(argv[++i]); break;
-        case 't': delta_t = atof(argv[++i]); nt = atoi(argv[++i]); break;
+				case 'a': axis = atoi(argv[++i]); break;
         default: 
           syntax(argv[0]);
       }
@@ -135,10 +121,6 @@ int main(int argc, char *argv[])
     MPI_Finalize();
     exit(1);
   }
-
-  myModule.SetOctaveCount(octave);
-  myModule.SetFrequency(freq);
-  myModule.SetPersistence(pers);
 
   int sz = (xsz > ysz) ? xsz : ysz;
   sz = (zsz > sz) ? zsz : sz;
@@ -186,14 +168,14 @@ int main(int argc, char *argv[])
     float *p = noise;
     for (int i = 0; i < lzsz; i++)
     {
-      float Z = (i+sz)*d;
+      float Z = -1 + (i+sz)*d;
       for (int j = 0; j < lysz; j++)
       {
-        float Y = (j+sy)*d;
+        float Y = -1 + (j+sy)*d;
         for (int k = 0; k < lxsz; k++)
 				{
-					float X = (k+sx)*d;
-          *p++ = myModule.GetValue(X, Y, Z, T);
+					float X = -1 + (k+sx)*d;
+          *p++ = ((axis == 0 ? X : axis == 1 ? Y : Z) + 1) / 2.0;
 				}
       }
     }
@@ -248,15 +230,15 @@ int main(int argc, char *argv[])
 			id->SetFieldData(fd);
 			fd->Delete();
 
-#if 0
+#if 1
 {
-vtkXMLImageDataWriter *w = vtkXMLImageDataWriter::New();;
-char buf[246];
-sprintf(buf, "sim-%d.vti", mpir);
-w->SetInputData(id);
-w->SetFileName(buf);
-w->Write();
-w->Delete();
+	vtkXMLImageDataWriter *w = vtkXMLImageDataWriter::New();;
+	char buf[246];
+	sprintf(buf, "sim-%d.vti", mpir);
+	w->SetInputData(id);
+	w->SetFileName(buf);
+	w->Write();
+	w->Delete();
 }
 #endif
 
@@ -281,7 +263,7 @@ w->Delete();
 
     if (mpir == 0)
       std::cerr << "finished timestep " << t << "\n";
-
+	
 		sleep(1);
   }
 
