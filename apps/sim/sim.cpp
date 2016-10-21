@@ -19,7 +19,6 @@
 #include <vtkPointData.h>
 #include <vtkFloatArray.h>
 #include <vtkDataSetWriter.h>
-#include <vtkClientSocket.h>
 
 #include "MyServerSocket.h"
 
@@ -59,12 +58,11 @@ syntax(char *a)
       cerr << "  -l layoutfile      list of IPs or hostnames and ports of vis servers\n";
       cerr << "  -r xres yres zres  overall grid resolution (256x256x256)\n";
       cerr << "  -O octave          noise octave (4)\n";
-      cerr << "  -F frequency       noise frequency (8)\n";
+      cerr << "  -F frequency       noise frequency (3)\n";
       cerr << "  -P persistence     noise persistence (0.5)\n";
       cerr << "  -t dt nt           time series delta, number of timesteps (0, 1)\n";
       cerr << "  -m r s             set rank, size (for testing)\n";
-      cerr << "  -S                 open server socket and check for connection (default)\n";
-      cerr << "  -C                 check to see if a vis server is waiting\n";
+      cerr << "  -W                 wait for attachment\n";
     }
     MPI_Finalize();
     exit(1);
@@ -77,14 +75,14 @@ int main(int argc, char *argv[])
   int xsz = 256, ysz = 256, zsz = 256;
   float t = 3.1415926;
   int octave = 4;
-  float freq = 8.0;
+  float freq = 3.0;
   float pers = 0.5;
   float delta_t = 0;
   int   nt = 1;
   int   psize = 100000000;
   char  *layoutfile = NULL;
   int   lerr, gerr;
-  bool  server_socket = true;
+  bool  wait_for_vis = false;
 
   MPI_Init(&argc, &argv);
   MPI_Comm_size(MPI_COMM_WORLD, &mpis);
@@ -94,8 +92,7 @@ int main(int argc, char *argv[])
     if (argv[i][0] == '-') 
       switch(argv[i][1])
       {
-        case 'S': server_socket = true; break;
-        case 'C': server_socket = false; break;
+        case 'W': wait_for_vis = true; break;
         case 'l': layoutfile = argv[++i]; break;
         case 'p': psize = atoi(argv[++i]); break;
         case 'm': mpir = atoi(argv[++i]);
@@ -153,12 +150,8 @@ int main(int argc, char *argv[])
   int dy = ((ysz + factors[1])-1) / factors[1];
   int dz = ((zsz + factors[2])-1) / factors[2];
 
-  MyServerSocket *serverSocket = NULL;
-  if (server_socket)
-  {
-    serverSocket = MyServerSocket::New();
-    serverSocket->CreateServer(port);
-  }
+  MyServerSocket *serverSocket = MyServerSocket::New();
+  serverSocket->CreateServer(port);
 
   for (int t = 0; t < nt; t++)
   {
@@ -204,17 +197,53 @@ int main(int argc, char *argv[])
     // goes away
 
     vtkSocket *skt = NULL;
-    if (serverSocket && serverSocket->ConnectionWaiting())
+    int vis_ready, ok;
+    if (mpir == 0)
     {
-      skt = (vtkSocket *)serverSocket->WaitForConnection(1);
+      do
+      {
+	if (serverSocket->ConnectionWaiting())
+	  skt = (vtkSocket *)serverSocket->WaitForConnection(1);
+
+	if (wait_for_vis && skt == NULL) 
+	{
+	  std::cerr << ".";
+	  sleep(1);
+	}
+
+      } while (wait_for_vis && skt == NULL);
+
+      vis_ready = skt == NULL ? 0 : 1;
+      ok = vis_ready;
     }
-    else if (! serverSocket)
+
+    MPI_Bcast(&vis_ready, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    if (vis_ready)
     {
-      vtkClientSocket *clientSocket = vtkClientSocket::New();
-      if (clientSocket->ConnectToServer(server.c_str(), port))
-        clientSocket->Delete();
-      else
-        skt = (vtkSocket *)clientSocket;
+      if (mpir > 0)
+      {
+	skt = (vtkSocket *)serverSocket->WaitForConnection(10000);
+	ok = skt == NULL ? 0 : 1;
+      }
+    }
+
+    int global_ok;
+    MPI_Allreduce(&ok, &global_ok, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+
+    if (vis_ready && !global_ok)
+    {
+      if (mpir == 0)
+        std::cerr << "Root node saw vis server, but the others could not connect\n";
+	
+      if (skt)
+      {
+	int err = -1;
+	skt->Send((const void *)&err, sizeof(sz));
+	skt->CloseSocket();
+	skt->Delete();
+	skt = NULL;
+      }
     }
 
     if (skt)
