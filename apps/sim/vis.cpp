@@ -93,6 +93,7 @@ main(int argc, char *argv[])
 
   controller = vtkMPIController::New();
   controller->Initialize(&argc, &argv);
+  cerr << "B";
 
   mpis = controller->GetNumberOfProcesses();
   mpir = controller->GetLocalProcessId();
@@ -129,6 +130,10 @@ main(int argc, char *argv[])
   if (! layoutfile)
     syntax(argv[0]);
 
+  controller->Barrier();
+  std::cerr << "A";
+  controller->Barrier();
+
   // Select the mpir'th line of the layout file.  That'll contain the 
   // IP address or hostname of the node this process is running on and 
   // the port it should listen on.
@@ -144,6 +149,8 @@ main(int argc, char *argv[])
       lerr = 1;
   }
 
+  if (mpir == 0) cerr << "AllReduce ...\n";
+
   controller->AllReduce(&lerr, &gerr, 1, vtkCommunicator::MAX_OP);
   if (gerr)
   {
@@ -152,6 +159,8 @@ main(int argc, char *argv[])
     controller->Finalize();
     exit(1);
   }
+
+  if (mpir == 0) cerr << "AllReduce done\n";
 
   // Set up the parallel rendering pipeline
 

@@ -65,6 +65,7 @@ syntax(char *a)
       cerr << "  -W                 wait for attachment\n";
     }
     MPI_Finalize();
+    std::cerr << "EXIT\n";
     exit(1);
 }
 
@@ -150,11 +151,18 @@ int main(int argc, char *argv[])
   int dy = ((ysz + factors[1])-1) / factors[1];
   int dz = ((zsz + factors[2])-1) / factors[2];
 
+
   MyServerSocket *serverSocket = MyServerSocket::New();
   serverSocket->CreateServer(port);
 
+  if (mpir == 0)
+    std::cerr << "nt: " << nt << "\n";
+
   for (int t = 0; t < nt; t++)
   {
+    if (mpir == 0)
+      std::cerr << t << "\n";
+
     float T = t*delta_t;
 
     int ix = mpir / (factors[1] * factors[2]);
