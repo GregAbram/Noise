@@ -8,7 +8,8 @@
 #include <fstream>
 #include <sstream>
 #include <math.h>
-#include <noise/noise.h>
+
+#include "noise.h"
 
 #include "vtkImageData.h"
 #include "vtkPointData.h"
