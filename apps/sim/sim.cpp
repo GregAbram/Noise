@@ -10,7 +10,8 @@
 #include <sstream>
 #include <string>
 #include <math.h>
-#include <noise/noise.h>
+
+#include "noise.h"
 
 #include <vtkImageData.h>
 #include <vtkXMLImageDataWriter.h>

@@ -1,11 +1,7 @@
-cmake_minimum_required (VERSION 2.8.1)
 project(Noise)
 
 add_subdirectory(model)
 add_subdirectory(module)
-
-include_directories(/usr/local/include)
-link_directories(/usr/local/lib)
 
 add_library(noise 
 						latlon.cxx noisegen.cxx
