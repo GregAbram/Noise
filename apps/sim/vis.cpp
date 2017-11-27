@@ -11,10 +11,10 @@
 #include <vtkClientSocket.h>
 #include <vtkServerSocket.h>
 #include <vtkMPIController.h>
-#include <vtkCompositeRenderManager.h>
 #include <vtkRenderer.h>
 #include <vtkRenderWindow.h>
 #include <vtkWindowToImageFilter.h>
+#include <vtkCompositeRenderManager.h>
 #include <vtkContourFilter.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkActor.h>

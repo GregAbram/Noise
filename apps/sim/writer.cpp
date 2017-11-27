@@ -10,7 +10,6 @@
 #include <vtkClientSocket.h>
 #include <vtkServerSocket.h>
 #include "vtkMPIController.h"
-#include "vtkCompositeRenderManager.h"
 #include "vtkRenderer.h"
 #include "vtkRenderWindow.h"
 #include "vtkWindowToImageFilter.h"

@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 2.8.1)
 project(Noise)
+find_package(MPI)
 add_subdirectory(src)
 add_subdirectory(apps)
